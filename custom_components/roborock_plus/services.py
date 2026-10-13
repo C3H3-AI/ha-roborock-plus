@@ -20,15 +20,9 @@ from .const import DOMAIN, VACUUM_ERROR_CODES, DOCK_ERROR_CODES, resolve_code
 
 _LOGGER = logging.getLogger(__name__)
 
-VACUUM_ENTITY = vol.All(cv.ensure_list, [cv.entity_id])
 
-# ---------- resolve_error ----------
-def _resolve_error_schema(call: ServiceCall) -> dict[str, Any]:
-    """Build params dict, accepting either vacuum or dock error codes."""
-    raw_code = call.data.get("error_code")
-    if raw_code is None:
-        return {}
-    # Accept int, or string enum name from either mapping
+def _resolve_error_code(raw_code: Any) -> int:
+    """Accept int / str number / str enum name, return numeric error code."""
     v = resolve_code(raw_code, VACUUM_ERROR_CODES)
     if v == -1:
         v = resolve_code(raw_code, DOCK_ERROR_CODES)
@@ -37,126 +31,116 @@ def _resolve_error_schema(call: ServiceCall) -> dict[str, Any]:
             f"Unknown error_code {raw_code!r}. Use a numeric code or a known enum name "
             f"(vacuum: filter_screen_exception, dock: dirty_tank_latch_open, etc.)."
         )
-    return {"error_code": v}
-
-async def async_resolve_error(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
-    """Resolve a latched error (tap 'Resolved' in Roborock app)."""
-    entity = call.data["entity_id"]
-    params = _resolve_error_schema(call)
-    _LOGGER.info("roborock_plus.resolve_error → %s, params=%s", entity, params)
-    return await hass.services.async_call(
-        "vacuum", "send_command",
-        {"entity_id": entity, "command": "resolve_error", "params": params or {}},
-        blocking=True, return_response=True,
-    )
-
-# ---------- change_volume ----------
-async def async_change_volume(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
-    volume = int(call.data["volume"])
-    entity = call.data["entity_id"]
-    _LOGGER.info("roborock_plus.change_volume → %s volume=%s", entity, volume)
-    return await hass.services.async_call(
-        "vacuum", "send_command",
-        {"entity_id": entity, "command": "change_sound_volume", "params": {"volume": volume}},
-        blocking=True, return_response=True,
-    )
-
-# ---------- close_dnd_timer ----------
-async def async_dnd_close(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
-    entity = call.data["entity_id"]
-    _LOGGER.info("roborock_plus.dnd_close → %s", entity)
-    return await hass.services.async_call(
-        "vacuum", "send_command",
-        {"entity_id": entity, "command": "close_dnd_timer", "params": {}},
-        blocking=True, return_response=True,
-    )
-
-# ---------- reset_consumable ----------
-async def async_reset_consumable(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
-    entity = call.data["entity_id"]
-    which = call.data.get("which", ["main_brush", "side_brush", "filter", "sensor"])
-    _LOGGER.info("roborock_plus.reset_consumable → %s %s", entity, which)
-    return await hass.services.async_call(
-        "vacuum", "send_command",
-        {"entity_id": entity, "command": "reset_consumable", "params": which},
-        blocking=True, return_response=True,
-    )
-
-# ---------- get_status ----------
-async def async_get_status(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
-    entity = call.data["entity_id"]
-    _LOGGER.info("roborock_plus.get_status → %s", entity)
-    return await hass.services.async_call(
-        "vacuum", "send_command",
-        {"entity_id": entity, "command": "get_status", "params": {}},
-        blocking=True, return_response=True,
-    )
-
-# ---------- get_consumable ----------
-async def async_get_consumable(hass: HomeAssistant, call: ServiceCall) -> ServiceResponse:
-    entity = call.data["entity_id"]
-    _LOGGER.info("roborock_plus.get_consumable → %s", entity)
-    return await hass.services.async_call(
-        "vacuum", "send_command",
-        {"entity_id": entity, "command": "get_consumable", "params": {}},
-        blocking=True, return_response=True,
-    )
+    return v
 
 
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
-    """Register Roborock Plus services."""
+    """Register Roborock Plus services (闭包捕获 hass)."""
 
+    def _fire(entity: str, command: str, params: dict) -> None:
+        """Fire-and-forget the underlying RPC call."""
+        hass.services.call(
+            "vacuum", "send_command",
+            {"entity_id": entity, "command": command, "params": params},
+            blocking=True, return_response=False,
+        )
+
+    # ---------- resolve_error ----------
+    async def _resolve_error(call: ServiceCall) -> ServiceResponse:
+        entity = call.data["entity_id"]
+        raw = call.data.get("error_code")
+        params = {"error_code": _resolve_error_code(raw)} if raw is not None else {}
+        _LOGGER.info("roborock_plus.resolve_error → %s, params=%s", entity, params)
+        _fire(entity, "resolve_error", params)
+        return {"status": "ok", "entity": entity, "command": "resolve_error",
+                "params": params}
+
+    # ---------- change_volume ----------
+    async def _change_volume(call: ServiceCall) -> ServiceResponse:
+        volume = int(call.data["volume"])
+        entity = call.data["entity_id"]
+        _LOGGER.info("roborock_plus.change_volume → %s volume=%s", entity, volume)
+        _fire(entity, "change_sound_volume", {"volume": volume})
+        return {"status": "ok", "entity": entity, "command": "change_sound_volume",
+                "params": {"volume": volume}}
+
+    # ---------- close_dnd_timer ----------
+    async def _dnd_close(call: ServiceCall) -> ServiceResponse:
+        entity = call.data["entity_id"]
+        _LOGGER.info("roborock_plus.dnd_close → %s", entity)
+        _fire(entity, "close_dnd_timer", {})
+        return {"status": "ok", "entity": entity, "command": "close_dnd_timer"}
+
+    # ---------- reset_consumable ----------
+    async def _reset_consumable(call: ServiceCall) -> ServiceResponse:
+        entity = call.data["entity_id"]
+        which = call.data.get("which", ["main_brush", "side_brush", "filter", "sensor"])
+        _LOGGER.info("roborock_plus.reset_consumable → %s %s", entity, which)
+        _fire(entity, "reset_consumable", which)
+        return {"status": "ok", "entity": entity, "command": "reset_consumable",
+                "params": which}
+
+    # ---------- get_status ----------
+    async def _get_status(call: ServiceCall) -> ServiceResponse:
+        entity = call.data["entity_id"]
+        _LOGGER.info("roborock_plus.get_status → %s", entity)
+        _fire(entity, "get_status", {})
+        return {"status": "ok", "entity": entity, "command": "get_status"}
+
+    # ---------- get_consumable ----------
+    async def _get_consumable(call: ServiceCall) -> ServiceResponse:
+        entity = call.data["entity_id"]
+        _LOGGER.info("roborock_plus.get_consumable → %s", entity)
+        _fire(entity, "get_consumable", {})
+        return {"status": "ok", "entity": entity, "command": "get_consumable"}
+
+    # ---------- 注册 ----------
+    # supports_response=False（默认）— REST API 层不会预检查 return_response 兼容性
     hass.services.async_register(
-        DOMAIN, "resolve_error", async_resolve_error,
+        DOMAIN, "resolve_error", _resolve_error,
         schema=vol.Schema({
             vol.Required("entity_id"): cv.entity_id,
             vol.Optional("error_code"): vol.Any(int, str),
         }),
-        supports_response=True,
     )
 
     hass.services.async_register(
-        DOMAIN, "change_volume", async_change_volume,
+        DOMAIN, "change_volume", _change_volume,
         schema=vol.Schema({
             vol.Required("entity_id"): cv.entity_id,
             vol.Required("volume"): vol.All(int, vol.Range(min=0, max=100)),
         }),
-        supports_response=True,
     )
 
     hass.services.async_register(
-        DOMAIN, "dnd_close", async_dnd_close,
+        DOMAIN, "dnd_close", _dnd_close,
         schema=vol.Schema({
             vol.Required("entity_id"): cv.entity_id,
         }),
-        supports_response=True,
     )
 
     hass.services.async_register(
-        DOMAIN, "reset_consumable", async_reset_consumable,
+        DOMAIN, "reset_consumable", _reset_consumable,
         schema=vol.Schema({
             vol.Required("entity_id"): cv.entity_id,
             vol.Optional("which", default=["main_brush", "side_brush", "filter", "sensor"]):
                 [vol.In(["main_brush", "side_brush", "filter", "sensor"])],
         }),
-        supports_response=True,
     )
 
     hass.services.async_register(
-        DOMAIN, "get_status", async_get_status,
+        DOMAIN, "get_status", _get_status,
         schema=vol.Schema({
             vol.Required("entity_id"): cv.entity_id,
         }),
-        supports_response=True,
     )
 
     hass.services.async_register(
-        DOMAIN, "get_consumable", async_get_consumable,
+        DOMAIN, "get_consumable", _get_consumable,
         schema=vol.Schema({
             vol.Required("entity_id"): cv.entity_id,
         }),
-        supports_response=True,
     )
 
     _LOGGER.info("Roborock Plus services registered: resolve_error, change_volume, "

@@ -2,11 +2,11 @@
   "domain": "roborock_plus",
   "name": "Roborock Plus",
   "codeowners": ["@duola"],
-  "config_flow": false,
+  "config_flow": true,
   "documentation": "https://github.com/duola/ha-roborock-plus",
+  "integration_type": "service",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/duola/ha-roborock-plus/issues",
   "requirements": [],
-  "version": "0.1.0",
-  "after_dependencies": ["roborock"]
+  "version": "0.1.0"
 }
