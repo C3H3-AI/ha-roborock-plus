@@ -1,0 +1,105 @@
+resolve_error:
+  name: 消除锁存错误
+  description: 发送 V1 RPC resolve_error（对应 App 点"确定"清除错误提示）。不传 error_code 时设备自动清除当前错误。
+  fields:
+    entity_id:
+      name: 扫地机实体
+      required: true
+      selector:
+        entity:
+          domain: vacuum
+          integration: roborock
+    error_code:
+      name: 错误码
+      description: 数字错误码或枚举名（如 filter_screen_exception / dirty_tank_latch_open）。留空让设备自动清当前锁存错。
+      required: false
+      selector:
+        text:
+          multiline: false
+
+change_volume:
+  name: 调音量
+  description: 改变机器人语音音量 (0-100)。
+  fields:
+    entity_id:
+      name: 扫地机实体
+      required: true
+      selector:
+        entity:
+          domain: vacuum
+          integration: roborock
+    volume:
+      name: 音量百分比
+      required: true
+      example: 90
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+
+dnd_close:
+  name: 关闭勿扰模式
+  description: 立即关闭扫地机的勿扰定时。
+  fields:
+    entity_id:
+      name: 扫地机实体
+      required: true
+      selector:
+        entity:
+          domain: vacuum
+          integration: roborock
+
+reset_consumable:
+  name: 重置耗材计数
+  description: 重置主刷、边刷、滤网、传感器的剩余时间计数。
+  fields:
+    entity_id:
+      name: 扫地机实体
+      required: true
+      selector:
+        entity:
+          domain: vacuum
+          integration: roborock
+    which:
+      name: 重置哪些
+      description: 默认全部四个一起重置。
+      required: false
+      default: ["main_brush", "side_brush", "filter", "sensor"]
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: 主刷
+              value: main_brush
+            - label: 边刷
+              value: side_brush
+            - label: 滤网
+              value: filter
+            - label: 传感器
+              value: sensor
+
+get_status:
+  name: 取设备状态 JSON
+  description: 原始 V1 get_status 响应，用于诊断。
+  fields:
+    entity_id:
+      name: 扫地机实体
+      required: true
+      selector:
+        entity:
+          domain: vacuum
+          integration: roborock
+
+get_consumable:
+  name: 取耗材 JSON
+  description: 原始 V1 get_consumable 响应，用于诊断。
+  fields:
+    entity_id:
+      name: 扫地机实体
+      required: true
+      selector:
+        entity:
+          domain: vacuum
+          integration: roborock

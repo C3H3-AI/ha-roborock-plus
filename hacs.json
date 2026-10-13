@@ -1,0 +1,5 @@
+name: Roborock Plus
+description: Extra human-friendly services for Roborock vacuums (resolve_error, change_volume, ...).
+type: integration
+content_in_root: false
+ha_min_ver: "2024.5.0"
